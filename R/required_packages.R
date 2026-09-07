@@ -9,8 +9,8 @@
 #Rcpp
 library(Rcpp)
 library(RcppNumerical)
-library(devtools)
-find_rtools(T)
+#library(devtools)
+#find_rtools(T)
 
 #Parallelization
 library(foreach)
@@ -24,4 +24,4 @@ library(SplittingJRNMM)
 library(rexpokit) #matrix exponentiation
 library(mvnfast) #multivariate normal distribution
 
-library(expm)
+library(expm) #matrix exponentiation

@@ -1,5 +1,5 @@
 #-------------------------------------------------------------------------------
-# make_jobs.R                (repo copy of the Avon working script; verify)
+# make_jobs.R
 #
 # Build a validated SLURM task list (jobs.txt) for nSMC-ABC runs on the
 # CHB-MIT data, driven only by patient name(s).
@@ -33,17 +33,22 @@
 #   jobs.txt        one run per line:  <record> <period> <seizure_index> <L>
 #   jobs_report.csv full table of every seizure with its decision (kept/skipped)
 #-------------------------------------------------------------------------------
+
 # The summary-parsing function lives in prepare_EEG_functions.R. We only need
 # read_seizure_summary(), which has no heavy dependencies, but that file loads
 # edf/imputeTS at the top. To avoid requiring those just to build the task list,
 # we define a local copy of the parser here (identical logic).
+
 WINDOW_CAP   <- 40   # hard upper cap on window length (seconds)
 WINDOW_FLOOR <- 10   # minimum acceptable window length (seconds); below -> skip
+
 #--- argument parsing --------------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
+
 edf_dir <- "."
 out_path <- "jobs.txt"
 patients <- character(0)
+
 i <- 1
 while (i <= length(args)) {
   a <- args[i]
@@ -51,16 +56,20 @@ while (i <= length(args)) {
   if (a == "--out")     { out_path <- args[i + 1]; i <- i + 2; next }
   patients <- c(patients, a); i <- i + 1
 }
+
 if (length(patients) == 0) {
   stop("No patient given. Usage: Rscript make_jobs.R chb02 [chb05 ...] ",
        "[--edf_dir DIR] [--out jobs.txt]")
 }
+
 #--- local summary parser (same logic as prepare_EEG_functions.R) ------------
 read_seizure_summary <- function(summary_path) {
   if (!file.exists(summary_path)) stop("Summary file not found: ", summary_path)
+
   lines <- trimws(readLines(summary_path, warn = FALSE))
   current_file <- NA_character_
   starts <- c(); ends <- c(); files <- c()
+
   for (ln in lines) {
     if (grepl("^File Name:", ln)) {
       current_file <- trimws(sub("^File Name:", "", ln)); next
@@ -74,10 +83,12 @@ read_seizure_summary <- function(summary_path) {
       ends <- c(ends, v); next
     }
   }
+
   if (length(starts) == 0) stop("No seizures found in ", summary_path)
   if (length(starts) != length(ends))
     stop("Mismatched seizure start/end entries in ", summary_path,
          " (", length(starts), " starts, ", length(ends), " ends)")
+
   out <- data.frame(file = files,
                     record = sub("\\.edf$", "", files),
                     start = starts, end = ends,
@@ -86,32 +97,42 @@ read_seizure_summary <- function(summary_path) {
   out$seizure_index <- ave(seq_len(nrow(out)), out$file, FUN = seq_along)
   out[, c("file", "record", "seizure_index", "start", "end", "duration")]
 }
+
 #--- build the task list -----------------------------------------------------
 all_rows <- list()   # per-seizure report rows
 job_lines <- character(0)
+
 for (patient in patients) {
+
   summary_path <- file.path(edf_dir, paste0(patient, "-summary.txt"))
   if (!file.exists(summary_path)) {
     warning("Skipping ", patient, ": summary file not found at ", summary_path,
             call. = FALSE, immediate. = TRUE)
     next
   }
+
   sz <- read_seizure_summary(summary_path)
   sz <- sz[order(sz$record, sz$start), ]   # ensure chronological within file
+
   for (k in seq_len(nrow(sz))) {
     rec   <- sz$record[k]
     idx   <- sz$seizure_index[k]
     onset <- sz$start[k]
     dur   <- sz$duration[k]
+
     # end of the previous seizure in the SAME file (0 if none)
     prev <- sz[sz$record == rec & sz$start < onset, ]
     prev_end <- if (nrow(prev) > 0) max(prev$end) else 0
+
     available_before <- onset - prev_end
+
     # the agreed rule
     L <- min(dur, WINDOW_CAP, available_before)
     L <- floor(L)   # whole seconds; keeps grids clean
+
     # does the edf exist? (only warn; task list can still be built for planning)
     edf_exists <- file.exists(file.path(edf_dir, paste0(rec, ".edf")))
+
     keep <- is.finite(L) && L >= WINDOW_FLOOR
     reason <- if (!keep) {
       if (!is.finite(L) || L <= 0) "no usable pre-seizure recording"
@@ -119,12 +140,14 @@ for (patient in patients) {
     } else if (!edf_exists) {
       "KEPT but .edf missing (download before running)"
     } else "kept"
+
     all_rows[[length(all_rows) + 1]] <- data.frame(
       patient = patient, record = rec, seizure_index = idx,
       onset = onset, duration = dur,
       available_before = available_before, L = L,
       kept = keep, edf_present = edf_exists, reason = reason,
       stringsAsFactors = FALSE)
+
     if (keep) {
       # one line per period; both share length L
       job_lines <- c(job_lines,
@@ -133,17 +156,21 @@ for (patient in patients) {
     }
   }
 }
+
 #--- write outputs -----------------------------------------------------------
 report <- do.call(rbind, all_rows)
+
 report_path <- paste0(sub("\\.txt$", "", out_path), "_report.csv")
 writeLines(job_lines, out_path)
 write.csv(report, report_path, row.names = FALSE)
+
 #--- console summary ---------------------------------------------------------
 n_seiz  <- nrow(report)
 n_kept  <- sum(report$kept)
 n_skip  <- n_seiz - n_kept
 n_runs  <- length(job_lines)
 n_nomiss<- sum(report$kept & !report$edf_present)
+
 cat(sprintf("\nPatients      : %s\n", paste(patients, collapse = ", ")))
 cat(sprintf("Seizures found: %d\n", n_seiz))
 cat(sprintf("  kept        : %d  -> %d runs (before+during)\n", n_kept, n_runs))

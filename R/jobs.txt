@@ -1,0 +1,4 @@
+chb02_16 before 1 40
+chb02_16 during 1 40
+chb02_16+ before 1 40
+chb02_16+ during 1 40

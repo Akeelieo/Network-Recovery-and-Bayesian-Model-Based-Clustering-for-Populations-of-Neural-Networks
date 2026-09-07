@@ -110,16 +110,15 @@ get_window<-function(seizures,record,period,T_window=40,seizure_index=1){
 
   if(period=="during"){
     if(dur<T_window){
-      warning("Seizure in ",record," lasts ",dur,"s, shorter than T_window=",T_window,
-              "s. The window extends ",T_window-dur,"s past seizure end.",
-              call.=FALSE, immediate.=TRUE)
+      stop("Seizure in ",record," lasts ",dur,"s, shorter than T_window=",T_window,
+           "s. Choose a smaller T_window or a different record.")
     }
     if(dur>T_window){
       message("Note: seizure in ",record," lasts ",dur,
               "s; using only the first ",T_window,"s from onset.")
     }
     win_start<-onset
-    } else {
+  } else {
     win_start<-onset-T_window
     if(win_start<0){
       stop("Before-seizure window for ",record," starts at ",win_start,

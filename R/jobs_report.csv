@@ -1,0 +1,4 @@
+"patient","record","seizure_index","onset","duration","available_before","L","kept","edf_present","reason"
+"chb02","chb02_16",1,130,82,130,40,TRUE,FALSE,"KEPT but .edf missing (download before running)"
+"chb02","chb02_16+",1,2972,81,2972,40,TRUE,FALSE,"KEPT but .edf missing (download before running)"
+"chb02","chb02_19",1,3369,9,3369,9,FALSE,FALSE,"L=9s below floor of 10s"

@@ -1,124 +1,138 @@
-# Network Recovery and Bayesian Clustering for Populations of Neural Networks
+# Network Recovery and Bayesian Model-Based Clustering for Populations of Neural Networks
 
-ST980 MSc Dissertation — Akeel Shah, Department of Statistics, University of Warwick.
+Technical appendix to the ST980 MSc dissertation of Akeel Shah (2211111),
+Department of Statistics, University of Warwick.
 Supervisors: Dr Anastasia Mantziou and Dr Massimiliano Tamborrino.
 
-A two-stage pipeline for studying directed brain connectivity across epilepsy
-patients from scalp EEG:
+A two-stage pipeline for directed brain connectivity across epilepsy patients
+from scalp EEG (CHB-MIT database, 23 cases, 263 recovered networks):
 
-1. **Recovery.** For each recording, a directed network between four EEG
-   channels is recovered by likelihood-free inference (an adapted SMC-ABC
-   scheme) for a stochastic multi-population Jansen–Rit neural mass model.
-2. **Clustering.** The resulting population of networks is analysed with a
-   Bayesian mixture of measurement-error models, grouping recordings by
-   connectivity structure and summarising each group by a representative
-   network.
-
-Data: the CHB-MIT Scalp EEG Database (23 cases, paediatric epilepsy patients).
-
----
-
-## Repository structure
-
-```
-.
-├── README.md
-├── R/                          # inference and data-preparation code (R)
-│   ├── required_packages.R         # package dependencies
-│   ├── matrices_SplittingJRNMM.R   # exponential / covariance matrices for the splitting scheme
-│   ├── functions_SMC_ABC_JRNMM.R   # SMC-ABC functions (kernels, summaries, distance, iterations)
-│   ├── prepare_EEG_functions.R     # read .edf, parse seizures, window, scale, grid-align, cache
-│   ├── make_jobs.R                 # build the SLURM task list (jobs.txt) + selection report
-│   └── main_SMC_ABC_JRNMM.R        # run one recovery: Rscript main_...R <record> <period> [idx]
-├── hpc/                        # cluster submission scripts (SLURM, Warwick Avon)
-│   ├── run_array.sh                # job array: one task per line of jobs.txt
-│   ├── run_patient.sh              # per-patient: download .edf + submit before/during jobs
-│   └── run_edf.sbatch              # single-recording sbatch (48 cores)
-├── clustering/                 # stage-two Bayesian clustering code   ### ADD ###
-├── analysis/                   # aggregation + figures
-│   └── aggregate_rho.R             # build all_patients_rho.csv from ABC_Results/   ### ADD ###
-├── results/
-│   ├── all_patients_rho.csv        # recovered networks: per-edge posterior mode + mean, before/during
-│   ├── SUBJECTINFO                 # subject age and sex
-│   ├── jobs.txt                    # example task list
-│   └── jobs_report.csv             # kept/skipped seizures with reasons
-└── data/
-    └── README.md                   # how to download the CHB-MIT .edf files (not stored here)
-```
-
-`### ADD ###` marks folders/files to drop in from your machine (see "To finish", below).
+1. **Recovery** (Chapters 3–6). For each recording, a directed network between
+   four EEG channels is recovered by an adapted SMC-ABC scheme for a stochastic
+   multi-population Jansen–Rit neural mass model, following Ditlevsen,
+   Tamborrino and Tubikanec (2025), run at database scale on the Warwick Avon
+   cluster.
+2. **Clustering** (Chapters 7–9). The population of networks is analysed with
+   a Bayesian mixture of measurement-error models (Mantziou, Lunagómez and
+   Mitra, 2024), adapted to directed networks.
 
 ---
 
-## Data
+## Layout
 
-The raw `.edf` recordings are **not** included (tens of gigabytes, and freely
-available). Download them from PhysioNet into `data/` — see `data/README.md`.
-Each patient's directory also contains a `chbNN-summary.txt` file holding the
-seizure annotations parsed by `prepare_EEG_functions.R`.
+```
+R/            stage one: EEG preparation and nSMC-ABC recovery (R)
+hpc/          SLURM submission scripts for the Avon cluster
+analysis/     stage-one post-processing: aggregation, Chapter 6 figures and tests
+clustering/   stage two: simulation studies (Ch. 8) and EEG clustering (Ch. 9)
+  └─ mantziou2024_supplement/   unmodified helper files from the published supplement
+figures/      per-case figures (all cases) and the figures used in the text
+results/      recovered networks and derived tables (CSV)
+data/         instructions for obtaining the CHB-MIT recordings (not stored here)
+```
+
+---
+
+## Provenance
+
+| Component | Source | Modified here? |
+|---|---|---|
+| `SplittingJRNMM` (path simulator, C++/R) | Ditlevsen et al. (2025), Supplement B | no |
+| `R/functions_SMC_ABC_JRNMM.R`, `R/matrices_SplittingJRNMM.R` | Ditlevsen et al. (2025), Supplement C (code by I. Tubikanec) | essentially unchanged |
+| `R/prepare_EEG_functions.R`, `R/make_jobs.R`, `R/main_SMC_ABC_JRNMM.R`, `hpc/*` | this work | — |
+| `clustering/mantziou2024_supplement/*` | Mantziou et al. (2024), Supplement A | no |
+| `clustering/MCMC_mixture_e_sbm_psi.R` | Mantziou et al. (2024) sampler | **yes**: directed edge index set (12 ordered pairs, no diagonal); node neighbourhood extended to `2(n-1)` entries; `B == 1` Erdős–Rényi branch; `tau_conc` argument (Dirichlet concentration on cluster weights) |
+| `clustering/MCMC_mixture_e_sbm_diag.R` | as above, instrumented to record acceptance rates | yes |
+| `clustering/*.R` drivers, `analysis/*` | this work | — |
 
 ---
 
 ## Environment
 
-- **R 4.4.2.** Install dependencies with `source("R/required_packages.R")`.
-- The path simulator is the compiled package **`SplittingJRNMM`**.
-- On the Warwick **Avon** cluster: `module load GCC/13.3.0 R/4.4.2`, with
-  packages installed into a personal library (`R_LIBS_USER=$HOME/R/library`)
-  on a login node, since the compute nodes have no internet access.
+- R 4.4.2 (`source("R/required_packages.R")` installs the R dependencies);
+  the compiled package `SplittingJRNMM` from Supplement B of Ditlevsen et al.
+- Python 3.11 with `numpy`, `pandas`, `scipy`, `matplotlib` for `analysis/`.
+- Avon: `module load GCC/13.3.0 R/4.4.2`; packages installed into
+  `R_LIBS_USER=$HOME/R/library` on a login node (compute nodes are offline).
+
+Scripts in `clustering/` are run with `clustering/` as the working directory.
+
+---
+
+## Data
+
+The `.edf` recordings are not stored here. See `data/README.md` for download
+from PhysioNet (CHB-MIT v1.0.0). Case `chb17` produced no usable network;
+`chb24` has no entry in `SUBJECTINFO`.
 
 ---
 
 ## Reproducing the results
 
-1. **Download the data** (see `data/README.md`).
-2. **Build the task list** for one or more patients:
-   ```
-   Rscript R/make_jobs.R chb01 chb02 ...
-   ```
-   This writes `jobs.txt` (one run per line: `record period seizure_index L`)
-   and `jobs_report.csv` (every seizure, kept or skipped, with the reason).
-3. **Run the recovery** as a SLURM job array sized to the task list:
-   ```
-   N=$(grep -cve '^[[:space:]]*$' jobs.txt)
-   sbatch --array=1-${N} hpc/run_array.sh
-   ```
-   Each task calls `Rscript R/main_SMC_ABC_JRNMM.R <record> <period> <idx>` and
-   writes an `ABC_Results_<record>_<period>/` folder of posterior particles.
-   (`hpc/run_patient.sh` is an alternative that also downloads the needed
-   `.edf` files and submits a before/during job per seizure recording.)
-4. **Aggregate** the per-recording posteriors into the network population:
-   ```
-   Rscript analysis/aggregate_rho.R      ### ADD this script ###
-   ```
-   → `results/all_patients_rho.csv` (per edge: posterior mode and mean).
-5. **Cluster** the population with the stage-two model (`clustering/`).
-6. **Figures/tables** are produced by the scripts in `analysis/`.
+### Stage one — recovery (Chapters 5–6)
+
+1. `Rscript R/make_jobs.R chb01 chb02 ...` → `jobs.txt`, `jobs_report.csv`
+   (every seizure, kept or skipped, with reason).
+2. `N=$(grep -cve '^[[:space:]]*$' jobs.txt); sbatch --array=1-${N} hpc/run_array.sh`
+   Each task runs `Rscript R/main_SMC_ABC_JRNMM.R <record> <period> <idx>`
+   and writes `ABC_Results_<record>_<period>/`. 16 cores, 48 h walltime;
+   5–23 h per recording.
+3. `analysis/rho_networks_all_patients.ipynb` → `results/all_patients_rho.csv`
+   (posterior mode and mean per directed edge) and `figures/chbXX_networks_all.png`.
+4. `analysis/abc_posterior_all_patients.ipynb` (uses `abc_posterior_compare.py`)
+   → `results/all_patients_continuous_posteriors.csv`,
+   `results/continuous_shift_*.csv`, `figures/chbXX_posteriors_before_vs_during.png`,
+   `figures/continuous_shift_summary.pdf` (§6.3–6.4, Tables A.3).
+5. `analysis/population_connectivity.R` → `figures/conn_heatmap.pdf`,
+   `figures/networks_examples.pdf`, Tables 6.1, 6.2 and A.1 (§6.1–6.2).
+
+### Stage two — clustering (Chapters 8–9)
+
+| Dissertation | Script | Seed(s) |
+|---|---|---|
+| §8.1 reproduction of Mantziou et al. §5.1, random vs true initialisation | `clustering/Simulations_Section_5.1.R` | as in supplement |
+| §8.2 directed four-node study | `clustering/four_node_cluster_sim.R` | 1001, 2002 |
+| §9.1 chb01, Erdős–Rényi prior | `clustering/eeg_cluster_ER.R` | 2024; 3000 + r |
+| §9.1 chb01, two-block prior; §9.3.2 per-patient fits | `clustering/batch_cluster_all_patients.R` | as in file |
+| §9.2 distance-based check (Hamming, k-medoids, LOO classifier) | `clustering/eeg_distance_compare.R` | deterministic |
+| §9.3.1 MDS under Hamming / Jaccard / spectral | `clustering/eda_mds.R` | deterministic |
+| §9.3.3 paired sign tests, BH correction | `clustering/paired_edge_tests.R` | deterministic |
+| §9.3.4 clustering of transitions | `clustering/transition_clusters.R` | deterministic |
+| §7.6 acceptance rates, R-hat across restarts | `clustering/convergence_diagnostics.R` | as in file |
+
+Settings common to the EEG fits: 5,000 iterations, 1,000 burn-in, no thinning;
+`p ~ Beta(1,11)`, `q ~ Beta(1,4)`, `theta ~ Beta(0.5,0.5)`, `tau_conc = 5`.
+Simulation studies use `Beta(0.5,0.5)` throughout and `tau_conc = 1`.
+
+### Figures in Chapter 2
+
+`figures/tenwenty.py` (10–20 electrode layout) and `figures/plot_eeg_trace.R`
+(four-channel trace of `chb01_03` around seizure onset).
 
 ---
 
 ## Key outputs
 
-- `results/all_patients_rho.csv` — the recovered directed networks: for each
-  recording (patient, record, period) the 12 directed edges, each with a
-  posterior **mode** (0/1 point estimate) and **mean** (inclusion probability).
-- `results/jobs_report.csv` — audit trail of which seizures entered the study.
-- `results/SUBJECTINFO` — subject age and sex, for external validation.
+- `results/all_patients_rho.csv` — the 263 recovered directed networks: per
+  recording (case, record, period) the 12 edges, each with posterior mode
+  (0/1) and mean (inclusion probability). Appendix Table A.2.
+- `results/all_patients_continuous_posteriors.csv` — posterior means of the
+  ten continuous parameters per recording. Appendix Table A.3.
+- `results/jobs_report.csv` — which seizures entered the study and why.
+- `results/SUBJECTINFO` — age and sex per case (PhysioNet).
 
 ---
 
-## To finish
+## References
 
-- Add your **stage-two clustering code** under `clustering/`.
-- Add the **aggregation script** (`analysis/aggregate_rho.R`) that builds
-  `all_patients_rho.csv` from the `ABC_Results_*` folders.
-- Copy the authoritative `hpc/` scripts from the cluster (this repo's copies
-  should match those in `~/nJRNMM_edf/` on Avon).
-- Optionally record exact package versions (`sessionInfo()` or an `renv.lock`).
+Ditlevsen, S., Tamborrino, M. and Tubikanec, I. (2025). Network inference in a
+stochastic multi-population neural mass model via approximate Bayesian
+computation. *Annals of Applied Statistics*.
 
-## Authors and licence
+Mantziou, A., Lunagómez, S. and Mitra, R. (2024). Bayesian model-based
+clustering for populations of network data. *Annals of Applied Statistics*
+18(1), 266–302.
 
-Code by Akeel Shah. The SMC-ABC scheme adapts the method of Ditlevsen,
-Tamborrino and Tubikanec (2025); `functions_SMC_ABC_JRNMM.R` and
-`matrices_SplittingJRNMM.R` are based on code by Irene Tubikanec. The
-clustering follows Mantziou, Lunagómez and Mitra (2024).
+Shoeb, A. (2009). *Application of Machine Learning to Epileptic Seizure Onset
+Detection and Treatment*. PhD thesis, MIT. Data via PhysioNet (Goldberger et
+al., 2000).
